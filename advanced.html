@@ -1,0 +1,50 @@
+<h1>Advanced Ajax Animator 0.20.4+ Scripted Functionality</h1>
+<h4>General Tweaks</h4>
+<pre>
+array Ax.noloadids: Array of item IDs to not render 
+tip: To delete all shapes of a given ID on the wave client, just do wave2.del_expkeys(/shape_id/)
+
+</pre>
+<h4>Plugins</h4>
+<pre>
+Plugins are accessed via Ax.plugins[plugin_name](arguments)
+
+Wave(mx, my): create sine wave based on x position and changing y position (mx = x multiplier, my = y multiplier)
+
+Sine(mx, my): Same as Wave
+
+Cosine(mx, my): Same as Sine but using Cosine instead
+
+center: center all objects by Y axis, X unchanged
+
+centerX: center all objects by X axis, Y unchanged
+
+flip: flip horizontal
+
+flipY: flip vertical
+
+Explode: move everthing to somewhere random
+
+Brick Wall(startX, startY, height_of_wall_in_bricks, width_of_wall_in_bricks, brickheight_in_pix, brickwidth_in_pix);
+
+sinc wave(mx, my): an unnormalized sinec wave
+
+Random Shape: a random rectangle with random attributes at random places
+</pre>
+<h4>URL Prefs</h4>
+<pre>
+Certain functionality can be disabled or enabled based on URL parameters.
+
+?draw=false: do not create canvas
+</pre>
+
+<h4>Plugins API</h4>
+<pre>
+function Ax.api.loop.frame(callback): loop shapes of currently selected frame
+
+function Ax.api.loop.number(num, callback): loop 0 to num
+
+function Ax.api.transform.translate(shape, x, y): translate relative
+
+function Ax.api.transform.absolute(shape, x, y): translate absolute
+</pre>

@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+	<head>
+		<script type="text/javascript" src="datastore.js"></script>
+	</head>
+	<body>
+		<canvas id="playback" width="0" height="0">
+			Your browser doesn't support the magic
+		</canvas>  
+		<script type="text/javascript">
+			var ds = new Datastore("stick2beta");
+			var id = window.location.search.substr(1);
+			if(!id){
+				document.body.innerHTML = "Please load animation first TODO: make a pretteir error message"
+			}
+			ds.first(id, function(data){
+				var src = eval("("+data.data+")");
+				expand_save(src);
+				play = true;
+				play_loop();
+			})
+			
+			var canvas = document.getElementById("playback");
+			if(canvas.getContext){
+				ctx = canvas.getContext('2d')
+			}
+			function drawFigure(src){
+				var root = new Root(src.angle, src.pos);
+				(function(children, anchor){
+					for(var i = 0; i < children.length; i++){
+						var s = children[i]
+						if(s.type == "line"){
+							var n = new Line(anchor, s.angle, s.length, s.width, s.color)
+						}else if(s.type == "circle"){
+							var n = new Circle(anchor, s.angle, s.length, s.width, s.color)
+						}
+						arguments.callee(s.children, n)
+					}
+				})(src.children, root)
+			}
+			
+			framestore = []; //notice this is an array, not a object
+			stage = {x:0,y:0,width:0,height:0}; //x, y, width, height
+			fps = 12;
+			
+			function expand_save(obj){
+				var fs = [];
+				for(var i = 0; i < obj.data.length; i++){
+					fs[i] = [];
+					for(var s = 0; s < obj.data[i].length; s++){
+						fs[i].push(inflate_shape(obj.data[i][s]));
+					}
+				}
+				window.framestore = fs;
+				window.stage = obj.stage;
+				window.fps = obj.fps;
+				canvas.width = stage.width;
+				canvas.height = stage.height;
+				//load_animation(fs)
+			}
+			
+			function render_frame(frame){
+				var shapes = framestore[frame]
+				ctx.clearRect(0,0,stage.width, stage.height)
+				for(var i = 0; i < shapes.length; i++){
+					drawFigure(shapes[i])
+				}
+			}
+			
+			current_frame = -1; 
+			play = true;
+			
+			function play_loop(){
+				if(!play) return;
+				if(!framestore[++current_frame]) current_frame = 0;
+				render_frame(current_frame);
+				setTimeout(play_loop, 1000/fps)
+			}
+
+			function inflate_shape(obj){
+				var map = {
+					"r": "root",
+					"l": "line",
+					"c": "circle"
+				};
+				var shape = {};
+				shape.type = map[obj[0]];
+				if(obj[0] == "r"){
+					shape.pos = [obj[1],obj[2]]
+					shape.angle = obj[3]
+					shape.children = obj[4]
+				}else{
+					shape.length = obj[1]
+					shape.width = obj[2]
+					shape.color = obj[3]
+					shape.angle = obj[4]
+					shape.children = obj[5]
+			  }
+				for(var i = 0; i < shape.children.length; i++){
+					shape.children[i] = inflate_shape(shape.children[i])
+				}
+				return shape;
+			}
+			
+	    function Root(angle, pos){
+	      //this is a root point.
+	      var point = this;
+	      this.pos = pos||[500,500];
+	      this._angle = angle||0;
+	      this.children = [];
+	    }
+
+	    Root.prototype.getPos = function(){
+	      return this.pos;
+	    }
+	    Root.prototype.angle = function(){
+	      return this._angle;
+	    }
+	    Root.prototype.renderAll = function(){
+	      for(var i = 0; i < this.children.length; i++){
+	        this.children[i].renderAll()
+	      }
+	    }
+
+	    function Shape(){} //empty object which is extended upon
+
+	    Shape.prototype.angle = function(){
+	      return this.anchor.angle() + this._angle
+	    }
+
+	    Shape.prototype.getPos = function(){
+	      //time for some trigonometry!
+	      var anchor = this.anchor.getPos()
+	      var dy = Math.sin(this.angle()) * this.length;
+	      var dx = Math.cos(this.angle()) * this.length;
+	      return [anchor[0] + dx, anchor[1] + dy];
+	    }
+	    Shape.prototype.renderAll = function(){
+	      this.render();
+	      for(var i = 0; i < this.children.length; i++){
+	        this.children[i].renderAll()
+	      }
+	    }
+
+
+	    function Line(anchor, angle, length, width, color, noend){
+	      //a shape is a rendering of 2 arbitrary points
+	      var line = this;
+	      this.type = "line"
+	      this.anchor = anchor;
+	      this.children = [];
+	      this.length = length||50;
+	      this._angle = angle/(180/Math.PI);
+	      this.width = width||6;
+	      this.color = color||"#000";
+	      this.anchor.children.push(this);
+	      this.render();
+
+	    }
+	    Line.prototype = new Shape();
+
+	    Line.prototype.render = function(){
+	      var anchor = this.anchor.getPos()
+	      var end = this.getPos()
+				ctx.strokeStyle = this.color;
+				ctx.lineWidth = this.width;
+				ctx.lineCap = "round"
+				ctx.beginPath();
+				ctx.moveTo(anchor[0], anchor[1]);
+				ctx.lineTo(end[0], end[1]);
+				ctx.stroke();
+	    }
+
+
+
+
+	    function Circle(anchor, angle, length, width, color, noend){
+	      //a shape is a rendering of 2 arbitrary points
+	      var circle = this;
+	      this.anchor = anchor; //type = shape.
+	      this.children = [];
+	      this.type = "circle"
+	      this.length = length||50;
+	      var draw = this.draw = anchor.draw;
+	      this._angle = angle/(180/Math.PI);
+	      this.width = width||6;
+	      this.color = color||"#000";
+	      this.anchor.children.push(this);
+
+	      this.render();
+
+	    }
+	    Circle.prototype = new Shape();
+
+	    Circle.prototype.render = function(){
+	      var anchor = this.anchor.getPos()
+	      var end = this.getPos()
+				ctx.beginPath();
+				ctx.strokeStyle = this.color;
+				ctx.lineWidth = this.width;
+				ctx.arc((anchor[0]+end[0])/2, (anchor[1]+end[1])/2,
+								this.length/2,
+								0,
+								2 *Math.PI)
+				ctx.stroke();
+	    }
+
+
+		</script>
+	</body>
+</html>

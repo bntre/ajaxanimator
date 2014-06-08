@@ -1,0 +1,841 @@
+<!-- SOMEBODY FIX THIS HTML -->
+<head>
+  <title>VectorEditor</title>
+  <!-- SOMEBODY FIX THIS HTML -->
+  <style>
+  body{
+        font-family: arial, sans-serif;
+        font-size: 13px;
+        background-color: #DFE8F6;
+  }
+</style>
+</head>
+<body style="margin: 0; border: 0; padding: 0">
+  <div id="canvas" style="position: absolute;top:0;left:0; width: 100%; height: 100%; top: 0px; left: 0px"></div>
+
+    
+  <script type="text/javascript" src="jquery-1.3.2.js"></script>
+  <script type="text/javascript" src="raphael.js"></script>
+  <script type="text/javascript" src="editor.js"></script>
+  <script type="text/javascript" src="shape.js"></script>
+  <script type="text/javascript" src="tracker.js"></script>
+  <script src="http://gist.github.com/raw/240659/a709989db7023efb0111ccd89e20e4f6f7e0aed3/tinyjson.js" type="text/javascript"></script>
+  
+  <script type="text/javascript">
+    var draw = null;
+    var current_shape = null;
+    var selected_shape = null; //selected != current
+    var shadow_shape = null;
+    var resize_stage = false;
+    var stage = {
+      x: 200,
+      y: 100, //TODO: ste proportionally to size
+      width: 500,
+      height: 400
+    };
+    
+    
+    var fig_list = [];
+    var framestore = {};
+    var current_frame = 0;
+    
+    function render_info(){
+      if(selected_shape){
+        if(selected_shape.type != "root"){
+          $("#rootinfo").fadeOut();
+          $("#info").fadeIn();
+          $("#type").text(selected_shape.type)
+          $("#angle").text(Math.floor(selected_shape._angle*(180/Math.PI)))
+          $("#length").text(Math.floor(selected_shape.length))
+          $("#color").text(selected_shape.color)
+          $("#width").text(selected_shape.width);
+          
+          if(shadow_shape) shadow_shape.remove();
+          
+          shadow_shape = selected_shape.shape.clone();
+          shadow_shape.attr("stroke-width", (parseInt(shadow_shape.attr("stroke-width"))+5) + "px")
+          shadow_shape.attr("stroke","#9FCEFC")
+          shadow_shape.insertBefore(selected_shape.shape)
+        }else{
+          if(shadow_shape) shadow_shape.remove();
+          $("#rootinfo").fadeIn();
+          $("#info").fadeOut();
+        }
+      }else{
+        if(shadow_shape) shadow_shape.remove();
+        $("#info").fadeOut();
+        $("#rootinfo").fadeOut();
+      }
+    }
+    
+    setInterval(render_info, 100);
+    
+    $(document).ready(function(){
+        $("#angle").parent().click(function(){
+          var ang = prompt("Enter new angle",Math.floor(selected_shape._angle*(180/Math.PI)))
+          if(ang !== null && ang !== undefined){
+            selected_shape._angle = ang / (180/Math.PI);
+            selected_shape.renderAll();
+          }
+        })
+        $("#length").parent().click(function(){
+          var len = prompt("Enter new length",Math.floor(selected_shape.length))
+          if(len !== null && len !== undefined){
+            selected_shape.length = len;
+            selected_shape.renderAll();
+          }
+        })
+        $("#color").parent().click(function(){
+          var color = prompt("Enter new color",selected_shape.color)
+          if(color !== null && color !== undefined){
+            selected_shape.color = color;
+            selected_shape.renderAll();
+          }
+        })
+        $("#width").parent().click(function(){
+          var len = prompt("Enter new stroke-width",selected_shape.width)
+          if(len !== null && len !== undefined){
+            selected_shape.width = len;
+            selected_shape.renderAll();
+          }
+        })
+        $(".line").click(function(){
+          new Line(selected_shape,42)
+          selected_shape.renderAll()
+        })
+        
+        $(".circle").click(function(){
+          new Circle(selected_shape,42)
+          selected_shape.renderAll()
+          
+        })
+        $(".delete").click(function(){
+          if(confirm("Are you sure you want to delete this shape?")){
+            selected_shape.remove();
+          }
+        })
+        $(".makefig").click(function(){
+          addFigure(prompt("Name","Figure"+Math.floor(Math.random()*993588125)),selected_shape.save())
+        })
+    })
+
+
+
+
+    function Figure(src){
+      //a figure is composed of lines or circles
+      //each line/circle contains 2 points, one flexible, one anchored to another point
+      //they all go down to a root point, which has no parent.
+      var pos = [
+        src.pos[0] + stage.x,
+        src.pos[1] + stage.y
+      ]
+      this.root = new Root(src.angle, pos);
+      (function(parent, children){
+        for(var i = 0; i < children.length; i++){
+          var child = children[i]
+          if(child.type == "line"){
+            var el = new Line(parent, child.angle, child.length, child.width, child.color)
+          }else if(child.type == "circle"){
+            var el = new Circle(parent, child.angle, child.length, child.width, child.color)
+          }
+          arguments.callee(el, child.children); //recurse
+        }
+      })(this.root, src.children);
+      
+      this.root.renderAll();
+    }
+    
+    Figure.prototype.save = function(){
+      var s = this.root.save();
+      var nobj = {}
+      for(var i in s){
+        if(i == "pos"){
+          nobj.pos = [s.pos[0] - stage.x, s.pos[1] - stage.y]
+        }else{
+          nobj[i] = s[i]
+        }
+      }
+      return nobj;
+    }
+    
+    function Root(angle, pos, noend, draw){
+      //this is a root point.
+      var point = this;
+      var draw = this.draw = draw || window.draw;
+      
+      this.type = "root"
+      if(!noend){
+        this.shape = draw.ellipse(0,0,5,5)
+        .attr("fill","orange")
+        .mousedown(function(e){
+          if(e.button == 0 && !e.ctrlKey)
+            current_shape = point;
+          selected_shape = point;
+        
+        })
+      }
+      this.pos = pos||[500,500]
+      this.render()
+      this._angle = angle||0;
+      this.children = [];
+      
+    }
+    
+    
+    Root.prototype.all = function(){
+      var all = [];
+      (function(children){
+        for(var i = 0; i < children.length; i++){
+          all.push(children[i]);
+          arguments.callee(children[i].children)
+        }
+      })(this.children);
+      return all
+    }
+    Root.prototype.save = function(){
+      for(var i = 0, children = []; i < this.children.length; i++){
+        children.push(this.children[i].save())
+      }
+      return {
+        type: this.type,
+        pos: this.pos,
+        angle: Math.floor(this._angle * (180/Math.PI)),
+        children: children
+      }
+    }
+    
+    Root.prototype.render = function(){
+      if(this.shape){
+        this.shape.toFront();
+        this.shape.attr("cx",this.pos[0]).attr("cy",this.pos[1])
+      }
+    }
+    Root.prototype.move = Root.prototype.rotate = function(x,y){
+      this.pos = [x,y]
+    }
+    Root.prototype.getPos = function(){
+      return this.pos;
+    }
+    Root.prototype.angle = function(){
+      return this._angle;
+    }
+    Root.prototype.renderAll = function(){
+      this.render()
+      for(var i = 0; i < this.children.length; i++){
+        this.children[i].renderAll()
+      }
+    }
+    Root.prototype.remove = function(){
+      this.deleted = true;
+      
+      while(this.children.length > 0){
+        this.children[0].remove();
+      }
+      
+      if(this.shape)
+        this.shape.remove();
+    }
+    
+    function Shape(){} //empty object which is extended upon
+    
+    Shape.prototype.angle = function(){
+      return this.anchor.angle() + this._angle
+    }
+    Shape.prototype.rotate = function(x, y){
+      var pos = this.anchor.getPos()
+      var angle = Math.atan2(y - pos[1], x - pos[0]) - this.anchor.angle()
+      this._angle = angle;
+    }
+    Shape.prototype.move = function(x, y){
+      var pos = this.anchor.getPos()
+      this.rotate(x, y);
+      this.length = Math.sqrt(Math.pow(x-pos[0],2)+Math.pow(y-pos[1],2))
+    }
+    Shape.prototype.getPos = function(){
+      //time for some trigonometry!
+      var anchor = this.anchor.getPos()
+      var dy = Math.sin(this.angle()) * this.length;
+      var dx = Math.cos(this.angle()) * this.length;
+      return [anchor[0] + dx, anchor[1] + dy];
+    }
+    Shape.prototype.renderAll = function(){
+      this.render();
+      for(var i = 0; i < this.children.length; i++){
+        this.children[i].renderAll()
+      }
+    }
+    Shape.prototype.remove = function(){
+      this.deleted = true;
+
+      while(this.children.length > 0){
+        this.children[0].remove();
+      }
+      
+      this.shape.remove();
+      if(this.end) this.end.remove();
+      
+      //*
+      for(var i = 0; i < this.anchor.children.length; i++){
+        if(this.anchor.children[i] == this){
+          this.anchor.children.splice(i,1);
+        }
+      }
+      //*/
+      
+    }
+    Shape.prototype.save = function(){
+      for(var i = 0, children = []; i < this.children.length; i++){
+        children.push(this.children[i].save())
+      }
+      return {
+        type: this.type,
+        length: Math.floor(this.length),
+        width: this.width,
+        color: this.color,
+        angle: Math.floor(this._angle * (180/Math.PI)),
+        children: children
+      }
+    }
+    
+    function Line(anchor, angle, length, width, color, noend){
+      //a shape is a rendering of 2 arbitrary points
+      var line = this;
+      this.type = "line"
+      this.anchor = anchor; //type = shape.
+      var draw = this.draw = anchor.draw;
+      
+      this.children = [];
+      this.length = length||50;
+      this._angle = angle/(180/Math.PI);
+      this.shape = draw.path("")
+      this.width = width||6;
+      this.color = color||"#000";
+      if(!noend){
+        this.end = draw.ellipse(0,0,5,5)
+        .attr("fill","red")
+        .mousedown(function(e){
+          if(e.button == 0 && !e.ctrlKey)
+            current_shape = line;
+          selected_shape = line;
+          e.preventDefault()
+          e.stopPropagation()
+        })
+      }
+      this.anchor.children.push(this);
+      
+      this.render();
+      
+    }
+    Line.prototype = new Shape();
+    
+    Line.prototype.render = function(){
+      var anchor = this.anchor.getPos()
+      var end = this.getPos()
+      this.shape
+        .attr("path","M"+anchor[0]+","+anchor[1]+" L"+end[0]+","+end[1])
+        .attr('stroke-width',this.width+"px")
+        .attr('stroke', this.color)
+        .attr('stroke-linecap', 'round');
+      if(this.end)this.end.attr("cx",end[0]).attr("cy",end[1]).toFront();
+    }
+    
+    
+    
+    
+    function Circle(anchor, angle, length, width, color, noend){
+      //a shape is a rendering of 2 arbitrary points
+      var circle = this;
+      this.anchor = anchor; //type = shape.
+      this.children = [];
+      this.type = "circle"
+      this.length = length||50;
+      var draw = this.draw = anchor.draw;
+      this._angle = angle/(180/Math.PI);
+      this.shape = draw.ellipse(0,0,0,0)
+      this.width = width||6;
+      this.color = color||"#000";
+      if(!noend){
+        this.end = draw.ellipse(0,0,5,5)
+        .attr("fill","red")
+        .mousedown(function(e){
+          if(e.button == 0 && !e.ctrlKey)
+            current_shape = circle;
+          selected_shape = circle;
+        })
+      }
+      this.anchor.children.push(this);
+      
+      this.render();
+      
+    }
+    Circle.prototype = new Shape();
+    
+    Circle.prototype.render = function(){
+      var anchor = this.anchor.getPos()
+      var end = this.getPos()
+      this.shape
+      .attr("rx", this.length/2)
+      .attr("ry",this.length/2)
+      .attr("cx",(anchor[0]+end[0])/2)
+      .attr("cy",(anchor[1]+end[1])/2)
+      .attr('stroke-width',this.width + "px")
+      .attr('stroke', this.color)
+      //this.end.translate(end[0], end[1], true);
+      if(this.end)this.end.attr("cx",end[0]).attr("cy",end[1]).toFront();
+    }
+    
+    
+    
+    $(document).ready(function(){
+      draw = Raphael("canvas")
+      draw.setSize($(window).width(),$(window).height())
+      //new Person(draw);
+      $("#canvas").mousemove(function(event){
+        event.preventDefault()
+        if(current_shape){
+          if(event.shiftKey){
+            current_shape.move(event.clientX, event.clientY)
+            //somewhat a misnomer, its more of resizing
+          }else{
+            current_shape.rotate(event.clientX, event.clientY)
+          }
+          current_shape.renderAll()
+          render_info();
+        }
+        if(resize_stage){
+          if(resize_stage == stagehandle1){
+            stage.width += stage.x - event.clientX ;
+            stage.height += stage.y - event.clientY;
+            for(var i = 0; i < fig_list.length; i++){
+              fig_list[i].root.pos[0] -= stage.x - event.clientX;
+              fig_list[i].root.pos[1] -= stage.y - event.clientY;
+              fig_list[i].root.renderAll(); 
+            }
+            
+            stage.x = event.clientX;
+            stage.y = event.clientY;
+            stage_rect.attr(stage)
+            stagehandle1.attr({
+              x: stage.x  - 5,
+              y: stage.y  - 5
+            })
+          }else if(resize_stage == stagehandle2){
+            stage.width = event.clientX - stage.x;
+            stage.height = event.clientY - stage.y;
+            stage_rect.attr(stage)
+            stagehandle2.attr({
+              x: stage.x + stage.width - 5,
+              y: stage.y + stage.height - 5
+            })
+          }
+        }
+      });
+      
+      stage_rect = draw.rect(stage.x,stage.y,stage.width,stage.height).attr("fill","white").attr("stroke","none")
+
+      stagehandle1 = draw.rect(stage.x - 5, stage.y - 5, 10, 10).attr("fill","#E8D22C")
+        .mousedown(function(){
+          resize_stage = stagehandle1;
+        })
+      stagehandle2 = draw.rect(stage.x + stage.width - 5, stage.y + stage.height - 5, 10,10).attr("fill","#E8D22C")
+        .mousedown(function(){
+          resize_stage = stagehandle2;
+          
+        })
+      
+      $("#canvas").bind("contextmenu",function(e){
+        e.preventDefault();
+        return false;
+      })
+       $("#canvas").mouseup(function(event){
+        event.preventDefault()
+        current_shape = null;
+        resize_stage = false;
+        save_frame()
+        update_thumb(current_frame);
+      });
+      
+      /*
+      draw.path("M30,30 l-20,0 l 40,0 l-20,0 l0,20 l0,-40")
+        .attr("stroke-width","8").attr("stroke","green")
+        .click(function(){
+        new Figure({"type":"root","pos":[500,500],"angle":0,"children":[]})
+
+        })
+        */
+      //for(var i = 0; i < 50; i++){
+      
+      //}
+    })
+
+
+    function ScaledFigure(draw, src, scale){
+      //a figure is composed of lines or circles
+      //each line/circle contains 2 points, one flexible, one anchored to another point
+      //they all go down to a root point, which has no parent.
+      this.root = new Root(src.angle, src.pos, true, draw);
+      var scale = scale||1.0;
+      var allset = this.root.draw.set()
+      this.allset = allset;
+      this.root.pos = [this.root.pos[0] * scale, this.root.pos[1] * scale];
+      //this.root.shape.scale(0.1,0.1,0,0)
+      (function(parent, children){
+        for(var i = 0; i < children.length; i++){
+          var child = children[i]
+          if(child.type == "line"){
+            var el = new Line(parent, child.angle, child.length * scale, child.width * scale, child.color, true)
+          }else if(child.type == "circle"){
+            var el = new Circle(parent, child.angle, child.length * scale, child.width * scale, child.color, true)
+          }
+          allset.push(el.shape)
+          arguments.callee(el, child.children); //recurse
+        }
+      })(this.root, src.children);
+      
+      this.root.renderAll();
+    }
+    window.frames = [];
+    function addFrame(){
+      var td = document.createElement("td");
+      td.className = "border";
+      var div = document.createElement("div");
+      div.className = "frame";
+      $(div).data("framenum", frames.length);
+      frames.push(div);
+      td.innerHTML = "frame " + frames.length;
+      
+      td.appendChild(div);
+      document.getElementById("timeline").insertBefore(td,document.getElementById("next"));
+      //td.innerHTML = 
+      $(window).resize();
+      selectFrame(frames.length -1)
+      
+    }
+    
+    function addFigure(name, src, out){
+      var div = document.createElement("div");
+      var parent = document.createElement("div");
+      parent.className = "figcont"
+      parent.innerHTML = ""+name+"";
+      $(parent).data("iconsrc",src);
+      $(parent).data("importsrc", out||src);
+      $(parent).click(function(){
+        var fg = jQuery.extend($(this).data("importsrc"),{});
+        //yeah, this part is quite weird
+        if(true){
+          fg.pos[0] += (Math.floor(Math.random()*142)-21);
+          fg.pos[1] += (Math.floor(Math.random()*142)-21);
+          fig_list.push(new Figure(fg));
+        }
+          save_frame()
+          update_thumb(current_frame);
+      })
+      parent.appendChild(div)
+      document.getElementById("figures").appendChild(parent);
+      var canvas = Raphael(div, 60, 60);
+      
+      //TODO: do it without generating the figure twice.
+      var fig = new ScaledFigure(canvas, src, 1.0)
+      var nodes = fig.root.all(), set = fig.root.draw.set();
+      for(var i = 0; i < nodes.length; i++){
+        set.push(nodes[i].shape)
+      }
+      var box = set.getBBox()
+      fig.root.remove();
+      
+      
+      var scale = Math.min(1,Math.min(50/box.width, 50/box.height));
+      //console.log(scale,box.width, box.height)
+      //scale = 1
+      var fig = new ScaledFigure(canvas, src, scale)
+      var nodes = fig.root.all(), set = fig.root.draw.set();
+      for(var i = 0; i < nodes.length; i++){
+        set.push(nodes[i].shape)
+      }
+      
+      var box = set.getBBox()
+      
+      fig.root.pos[0] = 50/2;
+      fig.root.pos[1] = 50/2 + 5;
+      
+      
+      fig.root.renderAll()
+    }
+    
+    $(window).resize(function(){
+      draw.setSize($(window).width(),$(window).height())
+      $("#figures").css("height",($(window).height() - $("#timescroll").height()) + "px")
+        
+    })
+    
+    function update_thumb(num){
+      if(!$(frames[num]).data("canvas")){
+        var canvas = Raphael(frames[num], 100, 100);
+        $(frames[num]).data("canvas",canvas);
+      }else{
+        var canvas = $(frames[num]).data("canvas");
+        $.each($(frames[num]).data("canvas_figures"), function(i,e){
+          e.root.remove();
+        })
+      }
+      var frame = framestore[num]
+      var scale = Math.min(100/stage.width,100/stage.height)
+      var canvas_figures = [];
+      for(var i = 0; i < frame.length; i++){
+        canvas_figures.push(new ScaledFigure(canvas, frame[i], scale));
+      }
+
+      $(frames[num]).data("canvas_figures", canvas_figures)
+    }
+    
+    function save_frame(){
+      for(var i = 0, frame = []; i < fig_list.length; i++){
+        if(!fig_list[i].root.deleted){
+          frame.push(fig_list[i].save());
+        }
+      }
+      framestore[current_frame] = frame;
+    }
+    function selectFrame(num, nosave){
+      $(".frame").css("background-color","");
+      $(frames[num]).css("background-color","lightgray")
+      
+      if(playback) return current_frame = num;
+      
+      if(!nosave)save_frame();
+      update_thumb(current_frame);
+      
+      
+      for(var i = 0, frame = []; i < fig_list.length; i++){
+        fig_list[i].root.remove()
+      }
+      fig_list = [];
+      
+      remove_onion_skin()
+      onion_skin(num);
+      
+      
+      current_frame = num;
+      if(framestore[current_frame]){
+        //load from framestore 
+        var frame = framestore[current_frame]
+      }else if(num == 0){
+        //frame zero: do nothing
+        var frame = []
+      }else{
+        //load from previous frame
+        var frame = framestore[current_frame -1];
+      }
+      for(var i = 0; i < frame.length; i++){
+        fig_list.push(new Figure(frame[i]));
+      }
+      
+      
+      save_frame()
+      update_thumb(current_frame);
+    }
+    onion_skins = [];
+    function onion_skin(frame){
+      if(framestore[frame-1]){
+        //load from framestore 
+        var frame = framestore[frame-1]
+        for(var i = 0; i < frame.length; i++){
+          var fc = jQuery.extend({}, frame[i]);//copy object
+          fc.pos = [fc.pos[0] + stage.x, fc.pos[1] + stage.y]
+          var skin = (new ScaledFigure(draw, fc))
+          skin.allset.attr("opacity",".3")
+          onion_skins.push(skin)
+        }
+      }
+    }
+    function remove_onion_skin(){
+      for(var i = 0; i < onion_skins.length; i++){
+        onion_skins[i].root.remove();
+      }
+      onion_skins = [];
+    }
+    playback = false;
+    function initiate_playback(){
+      stagehandle1.hide()
+      stagehandle2.hide()
+      $(".figcont").hide()
+      remove_onion_skin()
+      playback = true;
+      current_shape = null;
+      selected_shape = null;
+      render_info();
+      
+      for(var i = 0, frame = []; i < fig_list.length; i++){
+        fig_list[i].root.remove()
+      }
+      fig_list = [];
+      $("#next").hide()
+    }
+    playback_items = [];
+    function play_frame(frame){
+      selectFrame(frame, true); //just update the ui
+      for(var i = 0; i < playback_items.length; i++){
+        playback_items[i].root.remove();
+      }
+      playback_items = [];
+      if(framestore[frame]){
+        //load from framestore 
+        var frame = framestore[frame]
+        for(var i = 0; i < frame.length; i++){
+          var fc = jQuery.extend({}, frame[i]);//copy object
+          fc.pos = [fc.pos[0] + stage.x, fc.pos[1] + stage.y]
+          var skin = (new ScaledFigure(draw, fc));
+          playback_items.push(skin)
+        }
+      }
+    }
+    function togglePlayback(){
+      if(playback){
+        playback = false;
+      }else{
+        playback = true;
+        initiate_playback();
+        autoplay();
+      }
+    }
+    function autoplay(){
+      if(playback){
+        if(++current_frame >= frames.length){
+          current_frame = 0;
+        }
+        play_frame(current_frame);
+       
+        setTimeout(arguments.callee, 1000/15);
+      }else{
+        exit_playback()
+      }
+    }
+    function exit_playback(){
+      stagehandle1.show()
+      stagehandle2.show()
+      playback = false
+      $(".figcont").show()
+      $("#next").show()
+      for(var i = 0; i < playback_items.length; i++){
+        playback_items[i].root.remove();
+      }
+      selectFrame(current_frame, true)
+    }
+    $(document).ready(function(){
+
+      var div = document.createElement("div"), canvas = Raphael(div, 100, 50);
+      canvas.path("M10,10 l0,30 l30,-15 Z").attr("fill","green");
+      canvas.rect(50, 10, 10, 30).attr("fill","gray");
+      canvas.rect(70, 10, 10, 30).attr("fill","gray");
+      $(div).click(function(){
+        togglePlayback()
+      })
+      $("#figures").append(div)
+      
+      $("#next").click(function(){
+        addFrame()
+         $("#next")[0].scrollIntoView()
+      })
+      
+      $("#timeline td.border").live("click",function(){
+        selectFrame($(this).find(".frame").data("framenum"))
+        
+      })
+      
+            
+      
+      addFigure("Blank",{"type":"root","pos":[200,200],"angle":0,"children":[{"type":"circle","length":20,"width":20,"color":"orange","angle":0,"children":[]}]},{"type":"root","pos":[200,200],"angle":0,"children":[]}); //blank is a special case
+      //for(var i = 0; i < 100; i++){
+      addFigure("Stickman",{"type":"root","pos":[200,200],"angle":0,"children":[{"type":"line","length":50,"width":6,"color":"#000","angle":110,"children":[{"type":"line","length":50,"width":6,"color":"#000","angle":0,"children":[]}]},{"type":"line","length":50,"width":6,"color":"#000","angle":70,"children":[{"type":"line","length":50,"width":6,"color":"#000","angle":0,"children":[]}]},{"type":"line","length":60,"width":6,"color":"#000","angle":-90,"children":[{"type":"circle","length":35,"width":6,"color":"#000","angle":0,"children":[]},{"type":"line","length":40,"width":6,"color":"#000","angle":140,"children":[{"type":"line","length":40,"width":6,"color":"#000","angle":10,"children":[]}]},{"type":"line","length":40,"width":6,"color":"#000","angle":-140,"children":[{"type":"line","length":40,"width":6,"color":"#000","angle":-10,"children":[]}]}]}]})
+      
+      addFrame()
+      
+    })
+  </script>
+  <style>
+    #timeline td {
+      background-color: lightblue;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    
+    td#next {
+      background-color: lightgreen;
+    }
+
+    #timeline td:hover {
+      background-color: #007fff;
+      padding: 10px;
+      color: white;
+      border-radius: 10px;
+    }
+    
+    #timeline div.frame{
+      width: 120px;
+      height: 100px;
+      background-color: white;
+    }
+    
+    #figures div.figcont{
+      background-color: lightblue;
+      padding: 10px;
+      margin: 10px;
+      border-radius: 10px;
+      height: 70px;
+      overflow:hidden;
+    }
+    #figures div.figcont:hover{
+      background-color: #007fff;
+      color: white;
+    }
+  </style>
+  <div style="position: absolute; left:0; width: 120px; border: 0; margin: 0; padding: 0px;height: 100%">
+
+  <div style="overflow-y: auto;overflow-x: hidden" id="figures">
+       
+    </div>
+  </div>
+  
+  <div id="info" style="display: none;padding: 10px; right: 20px; position: absolute; border-radius: 5px; background-color: #9FCEFC; width: 400px; top: 20px; height: 35px; opacity: 0.75; z-index: 2">
+    <span><b>Type:</b> <span id="type"></span></span>
+    
+    <b>Attach:</b>
+    <span class="line">Line</span> 
+    <span class="circle">Circle</span>
+    <span class="delete" style="float:right"><b>Delete</b></span>
+    <br>
+    <span><b>Angle:</b> <span id="angle"></span>&deg;</span>
+    <span><b>Length:</b> <span id="length"></span>px</span>
+    <span><b>Width:</b> <span id="width"></span>px</span>
+    <span><b>Color:</b> <span id="color"></span></span>
+    <br>
+    
+  </div>
+  
+  <div id="rootinfo" style="display: none;padding: 10px; right: 20px; position: absolute; border-radius: 5px; background-color: #9FCEFC; width: 250px; top: 20px; height: 35px; opacity: 0.75; z-index: 2">
+    <span><b>Type:</b> root</span>
+    
+    <b>Attach:</b>
+    <span class="line">Line</span> 
+    <span class="circle">Circle</span>
+    <span class="delete" style="float:right"><b>Delete</b></span>
+    <br>
+    <span class="makefig"><b>Add to Library</b></span>
+    
+  </div>
+  
+  <div style="position: absolute;bottom:0; width: 100%; overflow: auto; border: 0; margin: 0; padding: 0;" id="timescroll">
+    <table style="border: 0; margin: 0; padding: 15px">
+      <tr style="border: 0; margin: 0; padding: 0" id="timeline">
+        <td id="next">
+        <div style="width: 120px;">
+        Add new frame
+        </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+</body>
+<!-- SOMEBODY FIX THIS HTML -->
