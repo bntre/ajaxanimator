@@ -82,7 +82,7 @@ Ax.set_version( /*START*/
  files and direcories used via ajax
  */
 
-Ext.BLANK_IMAGE_URL = 'http://ajaxanimator.googlecode.com/svn-history/r444/trunk/ajaxanimator/theme/images/default/s.gif';
+Ext.BLANK_IMAGE_URL = '/theme/images/default/s.gif';
 
 Ax.files = {
   xserv: "http://antimatter15.com/ajaxanimator/html/", //XS(S)ERV(er)/g
@@ -103,7 +103,7 @@ Ax.files = {
 	faq: "../server/doc/faq.htm",
 	manual: "../server/doc/manual.htm",
 	
-	themes: "http://ajaxanimator.googlecode.com/svn-history/r444/trunk/ajaxanimator/theme/css/"
+	themes: "/theme/css/"
 }
 
 
@@ -3398,10 +3398,13 @@ Ax.dumpshapes = function(format){
 * Heh. This file provides wrappers for OnlyPaths. really quite simple really
 * donno if i'll even use this. it'll probably be filled with hacks and other crap
 * and there'll be probably more globals declared here than anywhere else... combined
-*/
 
 Ax.canvasWidth=480;
 Ax.canvasHeight=272; 
+*/
+Ax.canvasWidth=1000; // bntr: change also in other places
+Ax.canvasHeight=500; 
+
 
 Ax.lastselect = 0;
 
