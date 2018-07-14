@@ -82,9 +82,10 @@ Ax.set_version( /*START*/
  files and direcories used via ajax
  */
 
-Ext.BLANK_IMAGE_URL = '/theme/images/default/s.gif';
+Ext.BLANK_IMAGE_URL = '../theme/images/default/s.gif';
 
 Ax.files = {
+/*
   xserv: "http://antimatter15.com/ajaxanimator/html/", //XS(S)ERV(er)/g
   //xss datastore
   xssds: (location.protocol=='file:'?'http:':location.protocol)+"//datastore-service.appspot.com/",
@@ -102,8 +103,8 @@ Ax.files = {
 	export_swf: "../server/export/swf.php",
 	faq: "../server/doc/faq.htm",
 	manual: "../server/doc/manual.htm",
-	
-	themes: "/theme/css/"
+*/	
+	themes: "../theme/css/",
 }
 
 
