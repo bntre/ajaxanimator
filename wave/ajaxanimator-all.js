@@ -41,7 +41,8 @@ Ext.onReady(function() {
     // code here
  
 }); // eo function onReady
- 
+
+Ax.shapeIdCounter = 0; // bntr
  
 Ax.set_version = function(version_object){
   //Sets the current version of the applicaiton and does some operations with it
@@ -2451,6 +2452,7 @@ VectorEditor.prototype.onMouseDown = function(x, y, target){
       return; //die trackers die!
     }
     
+    console.log("Select: ", shape_object); // bntr
     
     if(this.selectadd){
       this.selectAdd(shape_object);
@@ -2509,7 +2511,7 @@ VectorEditor.prototype.onMouseDown = function(x, y, target){
     }
     if(shape){
       //shape.id = this.generateUUID();
-      shape.id = shape.type + shape.id; // bntr: readable better than random
+      shape.id = shape.type + (Ax.shapeIdCounter++); // bntr: readable better than random
       shape.attr({
           "fill": this.prop.fill, 
           "stroke": this.prop.stroke,
@@ -2545,7 +2547,8 @@ VectorEditor.prototype.onMouseMove = function(x, y, target){
         //no multi-rotate
         var box = this.selected[0].getBBox()
         var rad = Math.atan2(y - (box.y + box.height/2), x - (box.x + box.width/2))
-        var deg = ((((rad * (180/Math.PI))+90) % 360)+360) % 360;
+        //var deg = ((((rad * (180/Math.PI))+90) % 360)+360) % 360;
+        var deg = (rad * 180/Math.PI - 90 + 360) % 360 - 180; // bntr
         this.selected[0].rotate(deg, true); //absolute!
         //this.rotateTracker(deg, (box.x + box.width/2), (box.y + box.height/2))
         this.updateTracker();
@@ -3111,13 +3114,15 @@ VectorEditor.prototype.clearShapes = function(){
   }
 }
 
+/*
 VectorEditor.prototype.generateUUID = function(){
   var uuid = "", d = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for(var i = 0; i < 4/*16*/; i++){
+  for(var i = 0; i < 4; i++){
     uuid += d.charAt(Math.floor(Math.random()*(i?d.length:(d.length-10))));
   }
   return uuid;
 }
+*/
 
 VectorEditor.prototype.getShapeById = function(v){
   for(var i=this.shapes.length;i--&&this.shapes[i].id!=v;);
@@ -3380,6 +3385,18 @@ Ax.dumpshapes = function(format){
     else {
         return Ax.dumpshapes_core();
     }
+}
+
+Ax.dumpshapes_selected = function(format) { // bntr
+    var rawshapes = Ax.canvas.selected;
+    var newshapes = [];
+    for (var i = 0; i < rawshapes.length; i++) {
+        newshapes.push(Ax.dumpshape(rawshapes[i]));
+    }
+    if (format == "json") {
+        newshapes = Ext.util.JSON.encode(newshapes);
+    }
+	return newshapes;
 }
 
 
@@ -4138,7 +4155,8 @@ Ax.clipboard_paste = function(index){
     if(Ax.clipboard_store[index] && Ax.clipboard_store[index].length > 0){
       for(var i = 0; i < Ax.clipboard_store[index].length; i++){
         var sh = Ax.clipboard_store[index][i];
-        sh.id = Ax.canvas.generateUUID()
+        //sh.id = Ax.canvas.generateUUID()
+        sh.id = sh.type + (Ax.shapeIdCounter++);
         var nsh = Ax.loadShape(sh);
         if(Ax.clipboard_store[index].length == 1){
           Ax.canvas.select(nsh) //no not the NSA
@@ -4404,7 +4422,7 @@ Ext.apply(this,{
   
   {text: "Editor", iconCls: "app_settings", menu: [
   
-  {text: "Dump Shapes", iconCls: "tb_info", handler: function(){Ext.MessageBox.alert("Editor Frame JSON",Ax.dumpshapes("json"))}},
+  {text: "Dump Selected Shapes", iconCls: "tb_info", handler: function(){Ext.MessageBox.alert("Editor Frame JSON",Ax.dumpshapes_selected("json"))}},
   {text: "Select All", iconCls: "tb_cursor", handler: function(){Ax.canvas.selectAll()}},
   '-',
       {text: "Cut", iconCls: "tb_cut", handler: function(){Ax.clipboard_cut()}}, //woah! look! the whole thing is progressively 2 characters more!
@@ -4448,6 +4466,8 @@ Ext.apply(this,{
       }
     },null,true)
     }},
+
+/*
     {text: "Wave", iconCls: "tb_wave", menu: [
     {text: "Set Gadget Height", handler: function(){
       if(window.gadgets && gadgets.window && gadgets.window.adjustHeight){
@@ -4505,6 +4525,7 @@ Ext.apply(this,{
           
         }}
     ]}
+*/
         
         ]}
         ],
